@@ -11,8 +11,8 @@ If you select *Hosted Feature Service* and your service is protected you need to
 
 In *Service url Layer/Table* insert the url of service's layer. It can be a *Feature Layer* or a *Table*.
 Example Service url Layer:
-https://host/server/rest/services/SampleAttach/MapServer/3
-http://host/OrgID/ArcGIS/rest/services/Earthquakes/EarthquakesFromLastSevenDays/FeatureServer/0 
+- https://host/server/rest/services/SampleAttach/MapServer/3
+- http://host/OrgID/ArcGIS/rest/services/Earthquakes/EarthquakesFromLastSevenDays/FeatureServer/0 
 
 In *Where* set a where clause for the query filter. Any legal SQL WHERE clause operating on the fields in the layer is allowed.
 If it is empty download all records.
@@ -43,8 +43,8 @@ For example:
 ```
 
 In the script there is a variable CHUNK. It's set 200 so every request sends chunk of 200 oids.
-If there's an error in request you can try to set a lower value (there's a limit of length in featureset.load())
-However if you set a value superior than *maxRecountCount* it's set *maxRecountCount*  
+If there's an error in request you can try to set a lower value (there's a limit of length in featureset.load()).
+However if you set a value superior than *maxRecountCount* it's set *maxRecountCount* 
 
 ### TODO
 - download domains
