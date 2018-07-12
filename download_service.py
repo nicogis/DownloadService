@@ -18,7 +18,8 @@ PROXIES = {}
 #  "https": "http://10.10.1.10:1080",
 # }
 
-CHUNK = 200
+# Here you can set th CHUNK
+CHUNK = 100
 
 def trace():
     """Determines information about where an error was thrown.
@@ -74,16 +75,44 @@ def chunklist(values, chunk):
     for i in range(0, len(values), chunk):
         yield values[i:i+chunk]
 
-def get_max_record_count(url, token, chunk):
+def init_params(token):
+    """initialize params"""
+    params = {'f' :'json'}
+    if not token is None:
+        params['token'] = token
+
+    return params
+
+def get_max_record_count(url, token):
     """num record max returned from query"""
-    response = chunk
+    response = CHUNK
     try:
-        params = {'f' :'json'}
-        if not token is None:
-            params['token'] = token
-        max_record_count = int(request(url, params)['maxRecordCount'])
-        if chunk > max_record_count:
+        params = init_params(token)
+        max_record_count = request(url, params)['maxRecordCount']
+        if CHUNK > max_record_count:
             return max_record_count
+    except:
+        pass
+
+    return response
+
+def get_record_count(url, params):
+    """number records of query"""
+    response = None
+    try:
+        params['returnCountOnly'] = str(True).lower()
+        response = request(url, params)['count']
+    except:
+        pass
+
+    return response
+
+def supports_pagination(url, token):
+    """layer support pagination"""
+    response = False
+    try:
+        params = init_params(token)
+        response = request(url, params)['advancedQueryCapabilities']['supportsPagination']
     except:
         pass
 
@@ -93,15 +122,12 @@ def get_has_attachments(url, token):
     """the service has Attachments"""
     has_attachments = False
     try:
-        params = {'f' :'json'}
-        if not token is None:
-            params['token'] = token
-        has_attachments = (request(url, params)['hasAttachments'])
+        params = init_params(token)
+        has_attachments = request(url, params)['hasAttachments']
     except:
         arcpy.AddWarning('Problem get hasAttachments info in service')
 
     return has_attachments
-
 
 def request(url, params):
     """request post"""
@@ -112,29 +138,22 @@ def request(url, params):
         if 'error' in response:
             raise Exception(response['error']['message'])
     except requests.exceptions.Timeout:
-        raise Exception('Connection to {0} timed out'.format(url))
+        raise Exception(f'Connection to {url} timed out')
     except requests.exceptions.ConnectionError:
-        raise Exception('Unable to connect to host at {0}'.format(url))
+        raise Exception(f'Unable to connect to host at {url}')
     except requests.exceptions.URLRequired:
-        raise Exception('Invalid URL - {0}'.format(url))
+        raise Exception(f'Invalid URL - {url}')
     except:
         raise
     return response
 
 def records_desc(table):
     """description records"""
-    if table:
-        str_fs = 'Rows'
-    else:
-        str_fs = 'Features'
-    return str_fs
+    return 'Rows' if table else 'Features'
 
 def is_table(base_url, token):
     """check if service layer is a table"""
-    params = {'f' :'json'}
-    if not token is None:
-        params['token'] = token
-
+    params = init_params(token)
     data = request(base_url.rstrip('/'), params)
     type_layer = data['type']
     return type_layer.lower() == 'table'
@@ -149,24 +168,19 @@ def download_file(url, local_filename):
                     shutil.copyfileobj(req.raw, file)
         return local_filename
     except:
-        arcpy.AddWarning('Error or file not found: {}'.format(url))
+        arcpy.AddWarning(f'Error or file not found: {url}')
         return None
 
-def get_oids(base_url, where_clause, spatial_filter, spatial_relationship, token):
-    """list of oids"""
-    params = {'f' :'json'}
-
-    # return only oids
-    params['returnIdsOnly'] = str(True).lower()
+def get_params_query(where_clause, spatial_filter, spatial_relationship, token):
+    """build query params"""
+    params = init_params(token)
 
     # set where
     if is_blank(where_clause):
         params['where'] = '1=1'
     else:
         params['where'] = where_clause
-    #set token
-    if not token is None:
-        params['token'] = token
+
     #set spatial filter
     desc_fset = arcpy.Describe(spatial_filter)
     if desc_fset.file:
@@ -178,12 +192,47 @@ def get_oids(base_url, where_clause, spatial_filter, spatial_relationship, token
                 else:
                     shape_json = shape
         shape_json = shape_json.JSON
-        params['geometryType'] = 'esriGeometry{}'.format(desc_fset.shapeType)
+        params['geometryType'] = f'''esriGeometry{desc_fset.shapeType}'''
         params['geometry'] = shape_json
         params['spatialRel'] = spatial_relationship
         params['inSR'] = desc_fset.spatialReference.factoryCode
-    data = request(add_url_path(base_url, 'query'), params)
-    return data['objectIds']
+
+    return params
+
+def get_object_ids(url, params):
+    """list oids"""
+    response = None
+    try:
+        params['returnIdsOnly'] = str(True).lower()
+        response = request(url, params)['objectIds']
+    except:
+        pass
+
+    return response
+
+def get_oids(base_url, where_clause, spatial_filter, spatial_relationship, token):
+    """list of oids"""
+    params_query = get_params_query(where_clause, spatial_filter, spatial_relationship, token)
+    num_recs = get_record_count(add_url_path(base_url, 'query'), params_query.copy())
+
+    oids = []
+    if supports_pagination(base_url, token) and not num_recs is None:
+        if num_recs > 0:
+            max_record_count = get_max_record_count(base_url, token)
+            iterations = num_recs // max_record_count + 1
+            if (num_recs % max_record_count) == 0:
+                iterations -= 1
+
+            params_query['resultRecordCount'] = max_record_count
+            for chunk in range(0, iterations):
+                offset = chunk * max_record_count
+                params_query['resultOffset'] = offset
+                oids += get_object_ids(add_url_path(base_url, 'query'), params_query)
+    else:
+        # return only oids
+        oids = get_object_ids(add_url_path(base_url, 'query'), params_query)
+
+    return oids
 
 def add_url_path(base_url, *args):
     """add path url"""
@@ -195,7 +244,8 @@ def add_url_path(base_url, *args):
 def generate_token(base_url, user, password):
     """generate token arcgis server"""
     server, instance = tuple(base_url.split('/')[2:4])
-    token_url = add_url_path('https://{}/{}'.format(server, instance), 'tokens', 'generateToken')
+    base = f'https://{server}'
+    token_url = add_url_path(base, instance, 'tokens', 'generateToken')
     params = {'username' : user, 'password' : password, 'client' : 'requestip', 'expiration' : 60, 'f' :'json'}
     response = request(token_url, params)
     return response['token']
@@ -226,11 +276,8 @@ def get_token(base_url):
 
 def download_data(base_url, token, oids, is_layer_table, chunk):
     """download data"""
-    params = {}
+    params = init_params(token)
     params['outFields'] = '*'
-    params['f'] = 'json'
-    if not token is None:
-        params['token'] = token
 
     total_downloaded = 0
     featuresets = []
@@ -238,21 +285,24 @@ def download_data(base_url, token, oids, is_layer_table, chunk):
     chunk_size = min([chunk, total])
     describe_recs = records_desc(is_layer_table)
     arcpy.ResetProgressor()
-    arcpy.SetProgressor('step', '{} {} to be downloaded'.format(total, describe_recs.lower()), 0, total, chunk)
+    arcpy.SetProgressor('step', f'''{total} {describe_recs.lower()} to be downloaded''', 0, total, chunk)
+    url = add_url_path(base_url, 'query')
     for current_chunk in chunklist(oids, chunk_size):
         oids_query = ",".join(map(str, current_chunk))
         if not oids_query:
             continue
         else:
-            if is_layer_table:
-                fetureset = arcpy.RecordSet()
-            else:
-                fetureset = arcpy.FeatureSet()
+            featureset = arcpy.RecordSet() if is_layer_table else arcpy.FeatureSet()
             params['objectIds'] = oids_query
-            fetureset.load('{}?{}'.format(add_url_path(base_url, 'query'), urlencode(params)))
-            featuresets.append(fetureset)
+            try:
+                featureset.load(f'''{url}?{urlencode(params)}''')
+            except:
+                arcpy.AddError('Try to set a lower value for variable CHUNK')
+                raise
+
+            featuresets.append(featureset)
             total_downloaded += chunk_size
-            arcpy.SetProgressorLabel('{} {} appended'.format(total_downloaded, describe_recs.lower()))
+            arcpy.SetProgressorLabel(f'''{total_downloaded} {describe_recs.lower()} appended''')
             arcpy.SetProgressorPosition()
     return featuresets
 
@@ -262,25 +312,24 @@ def download_attachments(folder_attachments, base_url, token, oids, is_layer_tab
         has_attachments = get_has_attachments(base_url, token)
         if has_attachments:
             arcpy.AddMessage('Please wait a moment ... download attachments ...')
-            params = {}
-            params['f'] = 'json'
-            if not token is None:
-                params['token'] = token
+            params = init_params(token)
             total = len(oids)
             describe_recs = records_desc(is_layer_table)
             arcpy.ResetProgressor()
-            arcpy.SetProgressor('step', '{} {} to be downloaded'.format(total, describe_recs.lower()), 0, total)
+            arcpy.SetProgressor('step', f'''{total} {describe_recs.lower()} to be downloaded''', 0, total)
             total_progress = 0
+
             for oid in oids:
                 url_attachment = add_url_path(base_url, oid, 'attachments')
                 attachment_infos = request(url_attachment, params)['attachmentInfos']
                 if attachment_infos:
                     for attachment_info in attachment_infos:
                         id_attachment = attachment_info['id']
-                        name_file = '{}-{}-{}'.format(oid, id_attachment, attachment_info['name'])
-                        download_file('{}?{}'.format(add_url_path(url_attachment, id_attachment), urlencode(params)), os.path.join(folder_attachments, name_file))
+                        id_attachment_name = attachment_info['name']
+                        name_file = f'{oid}-{id_attachment}-{id_attachment_name}'
+                        download_file(f'''{add_url_path(url_attachment, id_attachment)}?{urlencode(params)}''', os.path.join(folder_attachments, name_file))
                 total_progress += 1
-                arcpy.SetProgressorLabel('{} {} attachments'.format(total_progress, describe_recs.lower()))
+                arcpy.SetProgressorLabel(f'''{total_progress} {describe_recs.lower()} attachments''')
                 arcpy.SetProgressorPosition()
         else:
             arcpy.AddWarning('Service hasn\'t attachments')
@@ -292,14 +341,12 @@ def download_service():
         where_clause = arcpy.GetParameterAsText(4)
         spatial_filter = arcpy.GetParameter(5)
         spatial_relationship = arcpy.GetParameterAsText(6)
-        chunk_user = CHUNK
         folder_attachments = arcpy.GetParameterAsText(9)
         output_fc = arcpy.GetParameterAsText(10)
-
         token = get_token(base_url)
         is_layer_table = is_table(base_url, token)
-        chunk = get_max_record_count(base_url, token, chunk_user)
-        arcpy.AddMessage('Chunk used: {}'.format(chunk))
+        chunk = get_max_record_count(base_url, token)
+        arcpy.AddMessage(f'CHUNK used: {chunk}')
         describe_recs = records_desc(is_layer_table)
         arcpy.AddMessage('Please wait a moment ... loading oids ...')
         oids = get_oids(base_url, where_clause, spatial_filter, spatial_relationship, token)
@@ -313,7 +360,7 @@ def download_service():
             download_attachments(folder_attachments, base_url, token, oids, is_layer_table)
 
         else:
-            arcpy.AddWarning('{} not found'.format(describe_recs))
+            arcpy.AddWarning(f'{describe_recs} not found')
     except:
         arcpy.AddError('Error on \'{}\'\nin file \'{}\'\nwith error \'{}\''.format(*trace()))
     finally:
