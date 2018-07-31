@@ -14,6 +14,9 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId>Global|VisualStudio|ArcGISPro</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
+    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <Environment>
+    </Environment>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
@@ -30,6 +33,9 @@
     <Content Include=".pylintrc" />
     <Content Include="Download Service.tbx" />
     <Content Include="Images\DownloadService.PNG" />
+    <Content Include="mypy.ini">
+      <SubType>Code</SubType>
+    </Content>
     <Content Include="ReadMe.md" />
   </ItemGroup>
   <ItemGroup>

@@ -24,7 +24,7 @@ The *Spatial Relationship* is applied on the input geometry while performing the
 
 The *Username* and *Password* are required if the service is protected.
 
-In *Folder attachments* you can set an empty folder to download attachments of layer/table. It downloads files if the layer / table has attachments, the *hasAttachments* property of service should be true.
+In *Folder attachments* you can set an empty folder to download attachments of layer/table. It downloads files if the layer / table has attachments, the *hasAttachments* property of service should be true. The name of file is in the format: *oid-id_attachment-id_attachment_name*
 
 In *Output Feature Class/Table* select a dataset (feature class/table) for output 
 
