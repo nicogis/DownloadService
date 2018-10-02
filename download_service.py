@@ -113,18 +113,6 @@ def get_record_count(url: str, params: Dict[str, Any]) -> Optional[int]:
 
     return response
 
-def supports_pagination(url: str, token: Optional[str]) -> bool:
-    """layer support pagination"""
-    response: bool = False
-    try:
-        params: Dict[str, Any] = init_params(token)
-        advanced_query_capabilities = cast(Dict[str, Any], request(url, params))['advancedQueryCapabilities']
-        response = cast(Dict[str, bool], advanced_query_capabilities)['supportsPagination']
-    except:
-        pass
-
-    return response
-
 def get_has_attachments(url: str, token: Optional[str]) -> bool:
     """the service has Attachments"""
     has_attachments: bool = False
@@ -219,26 +207,9 @@ def get_object_ids(url: str, params: Dict[str, Any]) -> List[int]:
 def get_oids(base_url: str, where_clause: str, spatial_filter: Any, spatial_relationship: str, token: Optional[str]) -> List[int]:
     """list of oids"""
     params_query: Dict[str, Any] = get_params_query(where_clause, spatial_filter, spatial_relationship, token)
-    num_recs: Optional[int] = get_record_count(add_url_path(base_url, 'query'), params_query.copy())
 
-    oids: List[int] = []
-    if supports_pagination(base_url, token) and not num_recs is None:
-        if num_recs > 0:
-            max_record_count: int = get_max_record_count(base_url, token)
-            iterations: int = num_recs // max_record_count + 1
-            if (num_recs % max_record_count) == 0:
-                iterations -= 1
-            params_query['resultRecordCount'] = max_record_count
-            arcpy.AddMessage('\nSupport pagination\n')
-            oids = []
-            for chunk in range(0, iterations):
-                offset = chunk * max_record_count
-                params_query['resultOffset'] = offset
-                oids += get_object_ids(add_url_path(base_url, 'query'), params_query)
-    else:
-        # return only oids
-        oids = get_object_ids(add_url_path(base_url, 'query'), params_query)
-
+    # return only oids
+    oids: List[int] = get_object_ids(add_url_path(base_url, 'query'), params_query)
     return oids
 
 def add_url_path(base_url: str, *args: str) -> str:
