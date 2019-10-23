@@ -250,19 +250,19 @@ def get_token(base_url: str) -> Optional[str]:
         raise Exception('Error generate token')
     return token
 
-def download_data(base_url: str, token: Optional[str], oids: List[Union[int, str]], is_layer_table: bool, chunk: int):
+def download_data(base_url: str, token: Optional[str], oids: List[Union[int, str]], is_layer_table: bool, chunk: int, output_fc: str):
     """download data"""
     params: Dict[str, Any] = init_params(token)
     params['outFields'] = '*'
 
     total_downloaded: int = 0
-    featuresets = []
     total: int = len(oids)
     chunk_size: int = min([chunk, total])
     describe_recs: str = records_desc(is_layer_table)
     arcpy.ResetProgressor()
     arcpy.SetProgressor('step', f'''{total} {describe_recs.lower()} to be downloaded''', 0, total, chunk)
     url: str = add_url_path(base_url, 'query')
+    first: bool = True
     for current_chunk in chunklist(oids, chunk_size):
         oids_query = ",".join(map(str, current_chunk))
         if not oids_query:
@@ -276,11 +276,15 @@ def download_data(base_url: str, token: Optional[str], oids: List[Union[int, str
                 arcpy.AddError('Try to set a lower value for variable CHUNK')
                 raise
 
-            featuresets.append(featureset)
+            if first:
+                first = not first
+                arcpy.Merge_management(featureset, output_fc)
+            else:
+                arcpy.Append_management(featureset, output_fc)
+
             total_downloaded += chunk_size
             arcpy.SetProgressorLabel(f'''{total_downloaded} {describe_recs.lower()} appended''')
             arcpy.SetProgressorPosition()
-    return featuresets
 
 def download_attachments(folder_attachments: str, base_url: str, token: Optional[str], oids: List[Union[int, str]], is_layer_table: bool):
     """download attachments"""
@@ -329,8 +333,7 @@ def download_service():
 
         if oids:
             # Download data
-            featuresets = download_data(base_url, token, oids, is_layer_table, chunk)
-            arcpy.Merge_management(featuresets, output_fc)
+            download_data(base_url, token, oids, is_layer_table, chunk, output_fc)
 
             # Download attachments
             download_attachments(folder_attachments, base_url, token, oids, is_layer_table)
