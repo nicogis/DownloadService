@@ -42,7 +42,7 @@ For example:
     }
 ```
 
-In the script there is a variable CHUNK. It's set 100 so every request sends chunk of 200 oids.
+In the script there is a variable CHUNK. It's set 100 so every request sends chunk of 100 oids.
 If there's an error in request you can try to set a lower value (there's a limit of length in featureset.load()).
 However if you set a value superior than *maxRecountCount* it's set *maxRecountCount* 
 
